@@ -10,6 +10,7 @@ from test import validate
 from log_utils import *
 import math
 from torch.utils.tensorboard import SummaryWriter
+from adopt import ADOPT
 
 gap = 10
 from torch.cuda.amp import autocast, GradScaler
@@ -43,7 +44,7 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
         writer.add_scalar('Loss/train', loss.item(), epoch)
 
         if epoch % gap == 0:
-            validate(model, val_loader, criterion, device, epoch)  
+            validate(model, val_loader, criterion, device, epoch, exp_dir)  
             # torch.save(model, f'./checkpoints/{dataset}_{scale}_Epoch{epoch}_10_Aug2024.pth')
             save_checkpoint(model=model, optimizer=optimizer, epoch=epoch, experiment_dir= exp_dir)
 
@@ -66,22 +67,23 @@ if __name__ == "__main__":
     #                     help='JSON file for configuration')
     # parser.add_argument('-debug', '-d', action='store_true')
 
-    parser.add_argument('--weights_path', type=str, default='') # Use if inference is to be done live, while training the model ( Needs editing in the Code, Currently incompatible )
+    parser.add_argument('--sr3_weights_path', type=str, default='D:\Tarun_P\SR3_HSI\SR3_HSI\experiments\CHIKUSEI_2X\checkpoint\I100000_E142_gen.pth') # Use if inference is to be done live, while training the model ( Needs editing in the Code, Currently incompatible )
     parser.add_argument('--dataset', type=str, default='Pavia') # WashingtonDC, Pavia, or Chikusei
     parser.add_argument('--epochs', type=int, default = 1) # Number of epochs for training
     parser.add_argument('--use_eca', action='store_true') # Whether or not to use ECA (Efficient Channel Attention)
     parser.add_argument('--use_nonlocal', action='store_true') # Whether or not to use nonlocal conv blocks
     parser.add_argument('--experiment_name', type=str, default='GMOD_experiment') # Whether or not to use nonlocal conv blocks
+    parser.add_argument('--log_interval', type=int, default=10)
     args = parser.parse_args()
 
     exp_dir = create_experiment_folder(args.experiment_name)
-    writer = SummaryWriter(log_dir='exp_dir/tb_log')
+    writer = SummaryWriter(log_dir=f'{exp_dir}/tb_log')
 
     dataset = args.dataset
     
     dataroot = r"D:/Tarun_P/Datasets"
     dataroot = f"{dataroot}/{dataset}/LR_HR/SR_{l_resolution}_{h_resolution}_{scale}x"
-    sr3_weights_path = r"D:\Tarun_P\SR3_HSI\SR3_HSI\experiments\CHIKUSEI_2X\checkpoint\I100000_E142_gen.pth"
+    sr3_weights_path = r"D:\Tarun_P\SR3_HSI\SR3_HSI\experiments\CHIKUSEI_2X\checkpoint\I100000_E142_gen.pth" 
     
     if dataset=='Chikusei':
         num_bands = 128
@@ -115,25 +117,17 @@ if __name__ == "__main__":
 
     criterion = nn.MSELoss()
     # criterion  = gradientLoss(batch_size, 8e-1, 1)
-    optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    # optimizer = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    optimizer = ADOPT(model.parameters(), lr=learning_rate)
+    # optimizer = ADOPT(model.parameters(), lr=1e-3)
 
-    # model = GMOD(num_bands, upscale_factor, 1, '')
-    # loaded_model = torch.load(r"D:\Tarun_P\GMOD\checkpoints\Chikusei_2_Epoch49.pth")
-
-    # Extract the state dictionary
-    # state_dict = loaded_model.state_dict()
-    # model.load_state_dict(state_dict)
-
-    # validate(model, train_loader, criterion, torch.device('cuda'))
-    # params = sum(p.numel() for p in model.parameters())
-    # print(params)
 
     # Training
     log_model_params(model, exp_dir)
     train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device)
     writer.close()
     save_checkpoint(model=model, optimizer=optimizer, epoch=num_epochs, experiment_dir= exp_dir)
-    validate(model=model, val_loader=val_loader, criterion=criterion, device=device, epoch=num_epochs, ssim_required=False)
+    validate(model=model, val_loader=val_loader, criterion=criterion, device=device, epoch=num_epochs, exp_dir=exp_dir, ssim_required=False)
 
     # torch.save(model, f'./checkpoints/{dataset}_{scale}_Epoch{args.epochs}_10_Aug2024.pth')
     # test(model)
