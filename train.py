@@ -12,7 +12,7 @@ import math
 from torch.utils.tensorboard import SummaryWriter
 from adopt import ADOPT
 
-gap = 10
+
 from torch.cuda.amp import autocast, GradScaler
 def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, device):
     model = model.to(device)
@@ -43,7 +43,7 @@ def train(model, train_loader, val_loader, criterion, optimizer, num_epochs, dev
         log_training_loss(epoch, loss, experiment_dir=exp_dir)
         writer.add_scalar('Loss/train', loss.item(), epoch)
 
-        if epoch % gap == 0:
+        if epoch % log_interval == 0:
             validate(model, val_loader, criterion, device, epoch, exp_dir)  
             # torch.save(model, f'./checkpoints/{dataset}_{scale}_Epoch{epoch}_10_Aug2024.pth')
             save_checkpoint(model=model, optimizer=optimizer, epoch=epoch, experiment_dir= exp_dir)
@@ -55,7 +55,6 @@ if __name__ == "__main__":
         print("cuda activated")
 
     # Dataset
-    dataset = "WashingtonDC"
     l_resolution = 32
     h_resolution = 64
     scale = int(h_resolution//l_resolution)
@@ -63,24 +62,24 @@ if __name__ == "__main__":
     # Argparsing
     parser = argparse.ArgumentParser()
 
-    # parser.add_argument('-c', '--config', type=str, default=f'config/sr_sr3_{l_resolution}_{h_resolution}_{dataset}.json',
-    #                     help='JSON file for configuration')
-    # parser.add_argument('-debug', '-d', action='store_true')
-
-    parser.add_argument('--sr3_weights_path', type=str, default='D:\Tarun_P\SR3_HSI\SR3_HSI\experiments\CHIKUSEI_2X\checkpoint\I100000_E142_gen.pth') # Use if inference is to be done live, while training the model ( Needs editing in the Code, Currently incompatible )
-    parser.add_argument('--dataset', type=str, default='Pavia') # WashingtonDC, Pavia, or Chikusei
+    parser.add_argument('--sr3_weights_path', type=str, default='D:/Tarun_P/SR3_HSI/SR3_HSI/experiments/CHIKUSEI_2X/checkpoint/I100000_E142_gen.pth') # Use if inference is to be done live, while training the model ( Needs editing in the Code, Currently incompatible )
+    parser.add_argument('--dataset', type=str, default='WashingtonDC') # WashingtonDC, Pavia, or Chikusei
     parser.add_argument('--epochs', type=int, default = 1) # Number of epochs for training
     parser.add_argument('--use_eca', action='store_true') # Whether or not to use ECA (Efficient Channel Attention)
     parser.add_argument('--use_nonlocal', action='store_true') # Whether or not to use nonlocal conv blocks
     parser.add_argument('--experiment_name', type=str, default='GMOD_experiment') # Whether or not to use nonlocal conv blocks
+    parser.add_argument('--batch_size', type=int, default=12)
     parser.add_argument('--log_interval', type=int, default=10)
+    parser.add_argument('--learning_rate', type=float, default=1e-5)
+
     args = parser.parse_args()
 
+    # Making a directory to store logs & outputs, setting tensorboard log directory
     exp_dir = create_experiment_folder(args.experiment_name)
     writer = SummaryWriter(log_dir=f'{exp_dir}/tb_log')
 
+    # setting up dataset for training. Change when needed. 
     dataset = args.dataset
-    
     dataroot = r"D:/Tarun_P/Datasets"
     dataroot = f"{dataroot}/{dataset}/LR_HR/SR_{l_resolution}_{h_resolution}_{scale}x"
     sr3_weights_path = r"D:\Tarun_P\SR3_HSI\SR3_HSI\experiments\CHIKUSEI_2X\checkpoint\I100000_E142_gen.pth" 
@@ -97,9 +96,10 @@ if __name__ == "__main__":
     print('num_bands: ', num_bands)
 
     upscale_factor = int(h_resolution//l_resolution)
-    batch_size = 12
+    batch_size = args.batch_size
     num_epochs = args.epochs
-    learning_rate = 1e-5
+    learning_rate = args.learning_rate
+    log_interval = args.log_interval
 
     # Dataset and DataLoader
     transform = ToTensor()
