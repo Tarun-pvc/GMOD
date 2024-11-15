@@ -6,6 +6,8 @@ from log_utils import *
 from GMOD import GMOD
 from torch.utils.data import DataLoader
 from dataset import GMOD_Dataset
+import os
+from PIL import Image
 
 def validate(model, val_loader, criterion, device, epoch=0, exp_dir='./', ssim_required = False, val_mode = False):
     """ Function to print and log evaluation metrics : PSNR, SSIM, SAM & Loss """
@@ -34,7 +36,7 @@ def validate(model, val_loader, criterion, device, epoch=0, exp_dir='./', ssim_r
     with torch.no_grad():
         for lr, hr, sr in val_loader:
 
-            times+=1
+            
             lr, hr, sr = lr.to(device), hr.to(device), sr.to(device)
 
             # Just making sure no NaNs screw things up
@@ -45,6 +47,26 @@ def validate(model, val_loader, criterion, device, epoch=0, exp_dir='./', ssim_r
             outputs = model(lr.clamp(0,1), sr.clamp(0,1))
             loss = criterion(outputs.clamp(0,1), hr.clamp(0,1))
             val_loss += loss.item()
+
+            if times == 0 :  
+                os.makedirs(os.path.join(exp_dir, "imgs"), exist_ok=True)
+
+                for i in range(outputs.shape[0]):
+                    # Extract the first 3 bands for the i-th image
+                    image_with_3_bands = outputs[i, :3, :, :]  # shape: (3, 64, 64)
+
+                    image_with_3_bands = image_with_3_bands - image_with_3_bands.min()
+                    image_with_3_bands = image_with_3_bands / image_with_3_bands.max()
+                    image_with_3_bands = (image_with_3_bands * 255).byte()  
+                    image_with_3_bands = image_with_3_bands.permute(1, 2, 0).cpu().numpy()  # shape: (64, 64, 3)
+
+                    # Convert the numpy array to a PIL Image
+                    pil_image = Image.fromarray(image_with_3_bands)
+
+                    # Save the image as JPG
+                    pil_image.save(os.path.join(os.path.join(exp_dir, "imgs"), f'image_{i+1}.jpg'))
+
+                    times+=1
 
             
             psnr_ = PSNR(np.clip(outputs.cpu().numpy(),0,1), np.clip(hr.cpu().numpy(), 0, 1))
@@ -73,6 +95,8 @@ def validate(model, val_loader, criterion, device, epoch=0, exp_dir='./', ssim_r
                 SSIM_times += 1 if not math.isnan(ssim_) else 0
 
     loader_size = len(val_loader)
+
+
 
     # Printing & Logging
     if not val_mode:
